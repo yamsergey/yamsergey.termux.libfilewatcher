@@ -47,13 +47,14 @@ jobs:
         distribution: 'temurin'
         
     - name: Set up Android NDK
+      id: setup-ndk
       uses: nttld/setup-ndk@v1
       with:
         ndk-version: r26b
         
     - name: Build for ${{ matrix.arch }}
       env:
-        ANDROID_NDK: ${{ env.ANDROID_NDK_HOME }}
+        ANDROID_NDK: ${{ steps.setup-ndk.outputs.ndk-path }}
         ARCH: ${{ matrix.arch }}
         ANDROID_ARCH: ${{ matrix.android_arch }}
         TARGET_TRIPLE: ${{ matrix.target_triple }}
