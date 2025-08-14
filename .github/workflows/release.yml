@@ -2,7 +2,8 @@ name: Release
 
 on:
   push:
-    branches: [ main ]
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       version:
@@ -121,7 +122,7 @@ jobs:
     permissions:
       contents: write
     env:
-      RELEASE_VERSION: ${{ github.event.inputs.version || 'v1.0.dev' }}
+      RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
       
     steps:
     - name: Checkout code
@@ -134,45 +135,23 @@ jobs:
       with:
         path: release-artifacts/
         
-    - name: Prepare release package
+    - name: Prepare release artifacts
       run: |
         set -e
         
-        echo "📦 Preparing release package..."
+        echo "📦 Preparing individual architecture artifacts..."
         
-        # Create release directory structure
-        mkdir -p release/
-        mkdir -p release/native/
-        
-        # Copy artifacts by architecture
+        # Create architecture-specific archives
         for arch in aarch64 arm x86_64 i686; do
           if [ -d "release-artifacts/termux-filewatcher-${arch}" ]; then
-            mkdir -p "release/native/${arch}/"
-            cp release-artifacts/termux-filewatcher-${arch}/* "release/native/${arch}/"
-            echo "✅ Copied ${arch} binaries"
+            echo "✅ Creating ${arch} archive..."
+            tar -czf "libfilewatcher-${arch}-${RELEASE_VERSION}.tar.gz" \
+              -C "release-artifacts/termux-filewatcher-${arch}" .
           fi
         done
         
-        # Copy documentation and examples
-        cp README.md LICENSE CONTRIBUTING.md release/
-        cp -r examples/ release/ 2>/dev/null || true
-        cp -r docs/ release/ 2>/dev/null || true
-        
-        # Create simple installation script
-        echo '#!/bin/bash' > release/install.sh
-        echo 'echo "Installation script placeholder"' >> release/install.sh
-        chmod +x release/install.sh
-        
-        # Create simple README for release
-        echo '# Termux FileWatcher Release' > release/README-RELEASE.md
-        echo 'See README.md for installation instructions.' >> release/README-RELEASE.md
-        
-        # Create release archive
-        echo "📦 Creating release archive..."
-        tar -czf "termux-filewatcher-${RELEASE_VERSION}.tar.gz" -C release .
-        
-        echo "✅ Release package created:"
-        ls -lh termux-filewatcher-*.tar.gz
+        echo "✅ Architecture-specific archives created:"
+        ls -lh libfilewatcher-*.tar.gz
         
     - name: Generate changelog
       id: changelog
@@ -209,12 +188,15 @@ jobs:
         CHANGELOG="${CHANGELOG}* **i686** - 32-bit x86 (limited Termux support)\n"
         
         CHANGELOG="${CHANGELOG}\n## Installation\n\n"
+        CHANGELOG="${CHANGELOG}Download the appropriate archive for your architecture:\n\n"
+        CHANGELOG="${CHANGELOG}### AArch64 (Recommended for most Termux users)\n"
         CHANGELOG="${CHANGELOG}\`\`\`bash\n"
-        CHANGELOG="${CHANGELOG}wget https://github.com/yamsergey/termux-filewatcher/releases/download/${RELEASE_VERSION}/termux-filewatcher-${RELEASE_VERSION}.tar.gz\n"
-        CHANGELOG="${CHANGELOG}tar -xzf termux-filewatcher-${RELEASE_VERSION}.tar.gz\n"
-        CHANGELOG="${CHANGELOG}cd termux-filewatcher-${RELEASE_VERSION}/\n"
-        CHANGELOG="${CHANGELOG}./install.sh\n"
-        CHANGELOG="${CHANGELOG}\`\`\`\n"
+        CHANGELOG="${CHANGELOG}wget https://github.com/yamsergey/termux-filewatcher/releases/download/${RELEASE_VERSION}/libfilewatcher-aarch64-${RELEASE_VERSION}.tar.gz\n"
+        CHANGELOG="${CHANGELOG}tar -xzf libfilewatcher-aarch64-${RELEASE_VERSION}.tar.gz\n"
+        CHANGELOG="${CHANGELOG}cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/\n"
+        CHANGELOG="${CHANGELOG}\`\`\`\n\n"
+        CHANGELOG="${CHANGELOG}### Other Architectures\n"
+        CHANGELOG="${CHANGELOG}Replace \`aarch64\` with your architecture: \`arm\`, \`x86_64\`, or \`i686\`\n"
         
         # Save changelog (escape newlines for GitHub Actions)
         echo -e "$CHANGELOG" > CHANGELOG.md
@@ -232,7 +214,7 @@ jobs:
         name: "Termux FileWatcher ${{ env.RELEASE_VERSION }}"
         body: ${{ steps.changelog.outputs.changelog }}
         files: |
-          termux-filewatcher-*.tar.gz
+          libfilewatcher-*.tar.gz
         draft: false
         prerelease: false
         make_latest: true
@@ -243,11 +225,11 @@ jobs:
       run: |
         echo "📚 Release ${{ env.RELEASE_VERSION }} created successfully!"
         echo ""
-        echo "🔗 Download URL:"
-        echo "https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz"
+        echo "🔗 Release URL:"
+        echo "https://github.com/yamsergey/termux-filewatcher/releases/tag/${{ env.RELEASE_VERSION }}"
         echo ""
-        echo "📦 Installation command:"
-        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz && tar -xzf termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz && cd termux-filewatcher-${{ env.RELEASE_VERSION }}/ && ./install.sh"
+        echo "📦 Quick install (AArch64):"
+        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/libfilewatcher-aarch64-${{ env.RELEASE_VERSION }}.tar.gz && tar -xzf libfilewatcher-aarch64-${{ env.RELEASE_VERSION }}.tar.gz"
 
   notify:
     name: Notify Success
@@ -255,7 +237,7 @@ jobs:
     runs-on: ubuntu-latest
     if: success()
     env:
-      RELEASE_VERSION: ${{ github.event.inputs.version || 'v1.0.dev' }}
+      RELEASE_VERSION: ${{ github.event.inputs.version || github.ref_name }}
     
     steps:
     - name: Summary
@@ -268,13 +250,14 @@ jobs:
         echo "- **x86_64** (64-bit x86)" >> $GITHUB_STEP_SUMMARY
         echo "- **i686** (32-bit x86)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 🚀 Installation:" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Installation (AArch64):" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
-        echo "tar -xzf termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
-        echo "cd termux-filewatcher-${{ env.RELEASE_VERSION }}/" >> $GITHUB_STEP_SUMMARY
-        echo "./install.sh" >> $GITHUB_STEP_SUMMARY
+        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/libfilewatcher-aarch64-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+        echo "tar -xzf libfilewatcher-aarch64-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+        echo "cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/" >> $GITHUB_STEP_SUMMARY
         echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Other architectures:** Replace \`aarch64\` with \`arm\`, \`x86_64\`, or \`i686\`" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 🔗 Links:" >> $GITHUB_STEP_SUMMARY
         echo "- [📥 Download Release](https://github.com/yamsergey/termux-filewatcher/releases/tag/${{ env.RELEASE_VERSION }})" >> $GITHUB_STEP_SUMMARY
