@@ -43,10 +43,27 @@ pkg install clang openjdk-17
 ### Quick Install (Recommended)
 
 ```bash
-# Download and install latest release automatically
-wget -qO- https://github.com/yamsergey/termux-filewatcher/releases/latest/download/termux-filewatcher-*.tar.gz | tar -xz
-cd termux-filewatcher-*/
-./install.sh
+# Download latest release for your architecture
+# AArch64 (most common in Termux)
+wget https://github.com/yamsergey/termux-filewatcher/releases/latest/download/libfilewatcher-aarch64-*.tar.gz
+tar -xzf libfilewatcher-aarch64-*.tar.gz
+
+# Copy to Kotlin LSP (adjust path as needed)
+cp libfilewatcher_jni.so $PREFIX/opt/kotlin-lsp/native/Linux-AArch64/
+```
+
+**Other architectures**: Replace `aarch64` with `arm`, `x86_64`, or `i686`
+
+### Architecture Detection
+
+If you're unsure of your architecture:
+```bash
+# Check your architecture
+uname -m
+# aarch64 -> use libfilewatcher-aarch64-*.tar.gz
+# armv7l   -> use libfilewatcher-arm-*.tar.gz  
+# x86_64   -> use libfilewatcher-x86_64-*.tar.gz
+# i686     -> use libfilewatcher-i686-*.tar.gz
 ```
 
 ### Build from Source
@@ -69,11 +86,15 @@ make install KOTLIN_LSP_PATH=/path/to/kotlin-lsp
 ### Manual Installation
 
 ```bash
-# Copy to your Kotlin LSP native directory
-cp dist/libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/
+# Download specific version for your architecture
+wget https://github.com/yamsergey/termux-filewatcher/releases/download/v1.0.0/libfilewatcher-aarch64-v1.0.0.tar.gz
+tar -xzf libfilewatcher-aarch64-v1.0.0.tar.gz
 
 # Backup original (optional)
-cp /path/to/kotlin-lsp/native/Linux-AArch64/libfilewatcher_jni.so{,.original}
+cp /path/to/kotlin-lsp/native/Linux-AArch64/libfilewatcher_jni.so{,.backup}
+
+# Copy new library
+cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/
 ```
 
 ## 📖 Usage
@@ -233,6 +254,27 @@ make dev
 # Run tests
 make test
 ```
+
+### Creating Releases
+
+This project uses **tag-based releases**. To create a new release:
+
+```bash
+# Tag the release (use semantic versioning)
+git tag v1.0.0
+git push --tags
+
+# This automatically triggers GitHub Actions to:
+# - Cross-compile for all architectures
+# - Create individual architecture archives  
+# - Publish GitHub release with artifacts
+```
+
+**Release artifacts created:**
+- `libfilewatcher-aarch64-v1.0.0.tar.gz`
+- `libfilewatcher-arm-v1.0.0.tar.gz`
+- `libfilewatcher-x86_64-v1.0.0.tar.gz`
+- `libfilewatcher-i686-v1.0.0.tar.gz`
 
 ### Code Standards
 
