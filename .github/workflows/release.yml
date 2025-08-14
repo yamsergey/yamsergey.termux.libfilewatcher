@@ -1,0 +1,444 @@
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+env:
+  RELEASE_VERSION: ${{ github.event.inputs.version || format('v1.0.{0}', github.run_number) }}
+
+jobs:
+  build-cross-compile:
+    name: Cross-compile for Termux
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        arch: [aarch64, arm, x86_64, i686]
+        include:
+          - arch: aarch64
+            android_arch: aarch64
+            target_triple: aarch64-linux-android
+            api_level: 29
+          - arch: arm
+            android_arch: arm
+            target_triple: armv7a-linux-androideabi
+            api_level: 29
+          - arch: x86_64
+            android_arch: x86_64
+            target_triple: x86_64-linux-android
+            api_level: 29
+          - arch: i686
+            android_arch: x86
+            target_triple: i686-linux-android
+            api_level: 29
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        
+    - name: Set up Android NDK
+      uses: nttld/setup-ndk@v1
+      with:
+        ndk-version: r26b
+        
+    - name: Build for ${{ matrix.arch }}
+      env:
+        ANDROID_NDK: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        ARCH: ${{ matrix.arch }}
+        ANDROID_ARCH: ${{ matrix.android_arch }}
+        TARGET_TRIPLE: ${{ matrix.target_triple }}
+        API_LEVEL: ${{ matrix.api_level }}
+      run: |
+        set -e
+        
+        # Set up NDK toolchain
+        export TOOLCHAIN=${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64
+        export CC=${TOOLCHAIN}/bin/${TARGET_TRIPLE}${API_LEVEL}-clang
+        export CXX=${TOOLCHAIN}/bin/${TARGET_TRIPLE}${API_LEVEL}-clang++
+        export AR=${TOOLCHAIN}/bin/llvm-ar
+        export STRIP=${TOOLCHAIN}/bin/llvm-strip
+        
+        # Verify toolchain
+        echo "🔧 Using toolchain:"
+        echo "CC: $CC"
+        $CC --version
+        
+        # Create output directory
+        mkdir -p dist/${ARCH}
+        
+        echo "🚀 Building for ${ARCH}..."
+        
+        # Build stub implementation
+        echo "Building stub implementation..."
+        $CC -shared -fPIC -O2 -DNDEBUG \
+          -Iinclude \
+          -I${JAVA_HOME}/include \
+          -I${JAVA_HOME}/include/linux \
+          -o dist/${ARCH}/libfilewatcher_jni_stub.so \
+          src/stub/stub_filewatcher.c \
+          src/common/jni_helpers.c
+          
+        # Build real implementation
+        echo "Building real implementation..."
+        $CC -shared -fPIC -O2 -DNDEBUG \
+          -Iinclude \
+          -I${JAVA_HOME}/include \
+          -I${JAVA_HOME}/include/linux \
+          -o dist/${ARCH}/libfilewatcher_jni.so \
+          src/real/real_filewatcher.c \
+          src/common/jni_helpers.c
+          
+        # Strip symbols for smaller size
+        $STRIP dist/${ARCH}/*.so
+        
+        # Verify builds
+        echo "✅ Built libraries:"
+        file dist/${ARCH}/*.so
+        ls -lh dist/${ARCH}/
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: termux-filewatcher-${{ matrix.arch }}
+        path: dist/${{ matrix.arch }}/
+        retention-days: 7
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-cross-compile
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: release-artifacts/
+        
+    - name: Prepare release package
+      run: |
+        set -e
+        
+        echo "📦 Preparing release package..."
+        
+        # Create release directory structure
+        mkdir -p release/
+        mkdir -p release/native/
+        
+        # Copy artifacts by architecture
+        for arch in aarch64 arm x86_64 i686; do
+          if [ -d "release-artifacts/termux-filewatcher-${arch}" ]; then
+            mkdir -p "release/native/${arch}/"
+            cp release-artifacts/termux-filewatcher-${arch}/* "release/native/${arch}/"
+            echo "✅ Copied ${arch} binaries"
+          fi
+        done
+        
+        # Copy documentation and examples
+        cp README.md LICENSE CONTRIBUTING.md release/
+        cp -r examples/ release/ 2>/dev/null || true
+        cp -r docs/ release/ 2>/dev/null || true
+        
+        # Create installation script
+        cat > release/install.sh << 'EOF'
+#!/bin/bash
+# Termux FileWatcher Installation Script
+        
+set -e
+
+echo "🚀 Installing Termux FileWatcher..."
+
+# Detect architecture
+ARCH=$(uname -m)
+case $ARCH in
+  aarch64) ARCH_DIR="aarch64" ;;
+  armv7l|armv6l) ARCH_DIR="arm" ;;
+  x86_64) ARCH_DIR="x86_64" ;;
+  i686|i386) ARCH_DIR="i686" ;;
+  *)
+    echo "❌ Unsupported architecture: $ARCH"
+    echo "Supported: aarch64, arm, x86_64, i686"
+    exit 1
+    ;;
+esac
+
+echo "📋 Detected architecture: $ARCH -> $ARCH_DIR"
+
+# Check if native library exists
+if [ ! -f "native/$ARCH_DIR/libfilewatcher_jni.so" ]; then
+  echo "❌ No binary found for architecture: $ARCH_DIR"
+  echo "Available architectures:"
+  ls native/ 2>/dev/null || echo "  None found"
+  exit 1
+fi
+
+# Find Kotlin LSP installation
+KOTLIN_LSP_PATHS=(
+  "/data/data/com.termux/files/home/work/opt/kotlin-lsp"
+  "$HOME/work/opt/kotlin-lsp"
+  "$HOME/.local/share/kotlin-lsp"
+  "$PWD/../kotlin-lsp"
+)
+
+KOTLIN_LSP_PATH=""
+for path in "${KOTLIN_LSP_PATHS[@]}"; do
+  if [ -d "$path" ] && [ -f "$path/kotlin-lsp.sh.orig" ]; then
+    KOTLIN_LSP_PATH="$path"
+    break
+  fi
+done
+
+if [ -z "$KOTLIN_LSP_PATH" ]; then
+  echo "❌ Kotlin LSP installation not found"
+  echo "Please specify path: ./install.sh /path/to/kotlin-lsp"
+  exit 1
+fi
+
+if [ -n "$1" ]; then
+  KOTLIN_LSP_PATH="$1"
+fi
+
+echo "📍 Using Kotlin LSP at: $KOTLIN_LSP_PATH"
+
+# Create target directory
+TARGET_DIR="$KOTLIN_LSP_PATH/native/Linux-AArch64"
+TARGET_LIB="$TARGET_DIR/libfilewatcher_jni.so"
+
+if [ ! -d "$TARGET_DIR" ]; then
+  echo "❌ Target directory not found: $TARGET_DIR"
+  exit 1
+fi
+
+# Backup existing library
+if [ -f "$TARGET_LIB" ] && [ ! -f "$TARGET_LIB.backup" ]; then
+  echo "💾 Backing up existing library..."
+  cp "$TARGET_LIB" "$TARGET_LIB.backup"
+fi
+
+# Install new library
+echo "📦 Installing FileWatcher library..."
+cp "native/$ARCH_DIR/libfilewatcher_jni.so" "$TARGET_LIB"
+
+# Verify installation
+if [ -f "$TARGET_LIB" ]; then
+  echo "✅ Installation successful!"
+  echo ""
+  echo "🧪 Testing Kotlin LSP..."
+  cd "$KOTLIN_LSP_PATH"
+  if ./kotlin-lsp.sh.orig --help >/dev/null 2>&1; then
+    echo "✅ Kotlin LSP integration successful!"
+  else
+    echo "⚠️  Kotlin LSP test failed, but library was installed"
+  fi
+  
+  echo ""
+  echo "📚 Usage:"
+  echo "  ./kotlin-lsp.sh.orig --stdio    # Start LSP server"
+  echo "  ./kotlin-lsp.sh.orig --help     # Show help"
+  echo ""
+  echo "🔄 To restore original:"
+  echo "  cp \"$TARGET_LIB.backup\" \"$TARGET_LIB\""
+else
+  echo "❌ Installation failed!"
+  exit 1
+fi
+EOF
+        chmod +x release/install.sh
+        
+        # Create README for release
+        cat > release/README-RELEASE.md << 'EOF'
+# Termux FileWatcher Release
+
+This release contains pre-built native libraries for Termux FileWatcher, compatible with the Kotlin Language Server.
+
+## Quick Installation
+
+```bash
+# Extract the release
+tar -xzf termux-filewatcher-*.tar.gz
+cd termux-filewatcher-*/
+
+# Run installation script (auto-detects architecture and Kotlin LSP location)
+./install.sh
+
+# Or specify Kotlin LSP path manually
+./install.sh /path/to/kotlin-lsp
+```
+
+## Manual Installation
+
+1. **Identify your architecture:**
+   ```bash
+   uname -m
+   # aarch64 -> use native/aarch64/
+   # armv7l   -> use native/arm/
+   # x86_64   -> use native/x86_64/  
+   # i686     -> use native/i686/
+   ```
+
+2. **Copy the library:**
+   ```bash
+   cp native/[your-arch]/libfilewatcher_jni.so \
+      /path/to/kotlin-lsp/native/Linux-AArch64/libfilewatcher_jni.so
+   ```
+
+3. **Test the installation:**
+   ```bash
+   cd /path/to/kotlin-lsp
+   ./kotlin-lsp.sh.orig --help
+   ```
+
+## Available Implementations
+
+- **`libfilewatcher_jni.so`** - Real implementation with inotify (recommended)
+- **`libfilewatcher_jni_stub.so`** - Stub implementation (compatibility only)
+
+## Architecture Support
+
+| Architecture | Termux Support | File |
+|--------------|----------------|------|
+| AArch64 (ARM64) | ✅ Primary | `native/aarch64/` |
+| ARM (32-bit) | ✅ Secondary | `native/arm/` |  
+| x86_64 | ✅ Limited | `native/x86_64/` |
+| i686 (32-bit x86) | ✅ Limited | `native/i686/` |
+
+## Troubleshooting
+
+See the main [README.md](README.md) for detailed troubleshooting steps.
+
+## Support
+
+- **Issues**: https://github.com/yamsergey/termux-filewatcher/issues
+- **Documentation**: https://github.com/yamsergey/termux-filewatcher
+EOF
+        
+        # Create release archive
+        echo "📦 Creating release archive..."
+        tar -czf "termux-filewatcher-${RELEASE_VERSION}.tar.gz" -C release .
+        
+        echo "✅ Release package created:"
+        ls -lh termux-filewatcher-*.tar.gz
+        
+    - name: Generate changelog
+      id: changelog
+      run: |
+        set -e
+        
+        echo "📝 Generating changelog..."
+        
+        # Get commits since last release/tag
+        if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+          LAST_TAG=$(git describe --tags --abbrev=0)
+          echo "Last tag: $LAST_TAG"
+          COMMITS=$(git log --oneline ${LAST_TAG}..HEAD)
+        else
+          echo "No previous tags found, using all commits"
+          COMMITS=$(git log --oneline)
+        fi
+        
+        # Generate changelog
+        CHANGELOG="## Changes\n\n"
+        
+        if [ -n "$COMMITS" ]; then
+          echo "$COMMITS" | while read -r commit; do
+            CHANGELOG="${CHANGELOG}* ${commit}\n"
+          done
+        else
+          CHANGELOG="${CHANGELOG}* Initial release\n"
+        fi
+        
+        CHANGELOG="${CHANGELOG}\n## Architecture Support\n\n"
+        CHANGELOG="${CHANGELOG}* **AArch64** - Primary Termux architecture (recommended)\n"
+        CHANGELOG="${CHANGELOG}* **ARM** - 32-bit ARM devices\n" 
+        CHANGELOG="${CHANGELOG}* **x86_64** - 64-bit x86 (limited Termux support)\n"
+        CHANGELOG="${CHANGELOG}* **i686** - 32-bit x86 (limited Termux support)\n"
+        
+        CHANGELOG="${CHANGELOG}\n## Installation\n\n"
+        CHANGELOG="${CHANGELOG}\`\`\`bash\n"
+        CHANGELOG="${CHANGELOG}wget https://github.com/yamsergey/termux-filewatcher/releases/download/${RELEASE_VERSION}/termux-filewatcher-${RELEASE_VERSION}.tar.gz\n"
+        CHANGELOG="${CHANGELOG}tar -xzf termux-filewatcher-${RELEASE_VERSION}.tar.gz\n"
+        CHANGELOG="${CHANGELOG}cd termux-filewatcher-${RELEASE_VERSION}/\n"
+        CHANGELOG="${CHANGELOG}./install.sh\n"
+        CHANGELOG="${CHANGELOG}\`\`\`\n"
+        
+        # Save changelog (escape newlines for GitHub Actions)
+        echo -e "$CHANGELOG" > CHANGELOG.md
+        
+        # Set output for GitHub Actions
+        CHANGELOG_ESCAPED=$(echo -e "$CHANGELOG" | sed ':a;N;$!ba;s/\n/\\n/g')
+        echo "changelog<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$CHANGELOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ env.RELEASE_VERSION }}
+        name: "Termux FileWatcher ${{ env.RELEASE_VERSION }}"
+        body: ${{ steps.changelog.outputs.changelog }}
+        files: |
+          termux-filewatcher-*.tar.gz
+        draft: false
+        prerelease: false
+        make_latest: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Update documentation
+      run: |
+        echo "📚 Release ${{ env.RELEASE_VERSION }} created successfully!"
+        echo ""
+        echo "🔗 Download URL:"
+        echo "https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz"
+        echo ""
+        echo "📦 Installation command:"
+        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz && tar -xzf termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz && cd termux-filewatcher-${{ env.RELEASE_VERSION }}/ && ./install.sh"
+
+  notify:
+    name: Notify Success
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: success()
+    
+    steps:
+    - name: Summary
+      run: |
+        echo "## 🎉 Release ${{ env.RELEASE_VERSION }} Published Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Cross-compiled for:" >> $GITHUB_STEP_SUMMARY
+        echo "- **AArch64** (Primary Termux architecture)" >> $GITHUB_STEP_SUMMARY
+        echo "- **ARM** (32-bit ARM devices)" >> $GITHUB_STEP_SUMMARY
+        echo "- **x86_64** (64-bit x86)" >> $GITHUB_STEP_SUMMARY
+        echo "- **i686** (32-bit x86)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🚀 Installation:" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+        echo "wget https://github.com/yamsergey/termux-filewatcher/releases/download/${{ env.RELEASE_VERSION }}/termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+        echo "tar -xzf termux-filewatcher-${{ env.RELEASE_VERSION }}.tar.gz" >> $GITHUB_STEP_SUMMARY
+        echo "cd termux-filewatcher-${{ env.RELEASE_VERSION }}/" >> $GITHUB_STEP_SUMMARY
+        echo "./install.sh" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 🔗 Links:" >> $GITHUB_STEP_SUMMARY
+        echo "- [📥 Download Release](https://github.com/yamsergey/termux-filewatcher/releases/tag/${{ env.RELEASE_VERSION }})" >> $GITHUB_STEP_SUMMARY
+        echo "- [📚 Documentation](https://github.com/yamsergey/termux-filewatcher#readme)" >> $GITHUB_STEP_SUMMARY
+        echo "- [🐛 Report Issues](https://github.com/yamsergey/termux-filewatcher/issues)" >> $GITHUB_STEP_SUMMARY

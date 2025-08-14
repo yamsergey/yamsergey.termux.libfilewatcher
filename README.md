@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Platform: Android/Termux](https://img.shields.io/badge/Platform-Android%2FTermux-green.svg)](https://termux.com/)
+[![Build Status](https://github.com/yamsergey/termux-filewatcher/workflows/CI/badge.svg)](https://github.com/yamsergey/termux-filewatcher/actions)
+[![Release](https://github.com/yamsergey/termux-filewatcher/workflows/Release/badge.svg)](https://github.com/yamsergey/termux-filewatcher/releases/latest)
 
 A Termux-compatible JNI implementation of file watching functionality for the Kotlin Language Server. This library provides both stub and real implementations to solve glibc compatibility issues when running IntelliJ-based language servers on Android/Termux.
 
@@ -38,7 +40,16 @@ This project provides drop-in replacements that work natively on Termux while ma
 pkg install clang openjdk-17
 ```
 
-### Build and Install
+### Quick Install (Recommended)
+
+```bash
+# Download and install latest release automatically
+wget -qO- https://github.com/yamsergey/termux-filewatcher/releases/latest/download/termux-filewatcher-*.tar.gz | tar -xz
+cd termux-filewatcher-*/
+./install.sh
+```
+
+### Build from Source
 
 ```bash
 # Clone the repository
