@@ -161,7 +161,7 @@ jobs:
         cat > release/install.sh << 'EOF'
 #!/bin/bash
 # Termux FileWatcher Installation Script
-        
+
 set -e
 
 echo "🚀 Installing Termux FileWatcher..."
