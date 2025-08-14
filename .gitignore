@@ -1,0 +1,51 @@
+# Build artifacts
+build/
+dist/
+*.o
+*.so
+*.a
+*.dylib
+*.dll
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test/unit/test_*
+test/integration/*.class
+test/manual/test_*
+/tmp/filewatcher_test*
+
+# Backup files
+*.backup
+*.orig
+*.bak
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
+
+# Java
+*.class
+*.jar
+
+# Logs
+*.log
+
+# Package files
+*.tar.gz
+*.zip
+
+# Documentation generated files
+docs/html/
+docs/latex/
