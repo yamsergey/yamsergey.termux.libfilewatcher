@@ -18,6 +18,10 @@
 #include <jni.h>
 #include <pthread.h>
 
+#ifdef REAL_IMPLEMENTATION
+#include <sys/inotify.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -142,21 +146,7 @@ typedef struct {
     int buffer_len;           /**< Current buffer length */
 } FileWatcher;
 
-/**
- * @brief Initialize JNI class and method caches
- * @param env JNI environment pointer
- * @return 1 on success, 0 on failure
- */
-int init_jni_cache(JNIEnv *env);
-
-/**
- * @brief Create Java Event object from inotify event
- * @param env JNI environment pointer
- * @param event inotify event structure
- * @param base_path Base path for the event
- * @return Java FileWatcher.Event object or NULL on failure
- */
-jobject create_event_object(JNIEnv *env, struct inotify_event *event, const char *base_path);
+// Internal functions are declared static in the implementation file
 
 /** @} */
 

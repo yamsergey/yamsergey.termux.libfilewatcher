@@ -9,6 +9,7 @@
 #include "filewatcher_jni.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 /**
  * @brief Debug logging flag (set via FILEWATCHER_DEBUG env var)
@@ -19,7 +20,7 @@ static int debug_enabled = -1;
  * @brief Check if debug logging is enabled
  * @return 1 if enabled, 0 if disabled
  */
-int is_debug_enabled() {
+int is_debug_enabled(void) {
     if (debug_enabled == -1) {
         const char *debug_env = getenv("FILEWATCHER_DEBUG");
         debug_enabled = (debug_env != NULL && *debug_env != '0') ? 1 : 0;

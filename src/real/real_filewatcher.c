@@ -22,19 +22,7 @@
 #include <errno.h>
 #include <stdarg.h>
 
-// Event buffer size
-#define EVENT_SIZE (sizeof(struct inotify_event))
-#define BUF_LEN (1024 * (EVENT_SIZE + 16))
-
-// Structure to hold watcher state
-typedef struct {
-    int inotify_fd;
-    pthread_mutex_t mutex;
-    // Simple event queue (in real implementation, you'd use a proper queue)
-    char event_buffer[BUF_LEN];
-    int buffer_pos;
-    int buffer_len;
-} FileWatcher;
+// FileWatcher structure is now defined in header file
 
 // Global cache for JNI classes and methods
 static jclass event_class = NULL;
