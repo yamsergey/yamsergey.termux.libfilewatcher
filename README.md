@@ -40,20 +40,6 @@ This project provides drop-in replacements that work natively on Termux while ma
 pkg install clang openjdk-17
 ```
 
-### Quick Install (Recommended)
-
-```bash
-# Download latest release for your architecture
-# AArch64 (most common in Termux)
-wget https://github.com/yamsergey/termux-filewatcher/releases/latest/download/libfilewatcher-aarch64-*.tar.gz
-tar -xzf libfilewatcher-aarch64-*.tar.gz
-
-# Copy to Kotlin LSP (adjust path as needed)
-cp libfilewatcher_jni.so $PREFIX/opt/kotlin-lsp/native/Linux-AArch64/
-```
-
-**Other architectures**: Replace `aarch64` with `arm`, `x86_64`, or `i686`
-
 ### Architecture Detection
 
 If you're unsure of your architecture:
@@ -65,6 +51,15 @@ uname -m
 # x86_64   -> use libfilewatcher-x86_64-*.tar.gz
 # i686     -> use libfilewatcher-i686-*.tar.gz
 ```
+
+### Installation
+
+```bash
+# Download specific version for your architecture
+wget https://github.com/yamsergey/termux-filewatcher/releases/download/v1.0.0/libfilewatcher-aarch64-v1.0.0.tar.gz
+tar -xzf libfilewatcher-aarch64-v1.0.0.tar.gz
+```
+``
 
 ### Build from Source
 
@@ -83,13 +78,6 @@ make stub
 make install KOTLIN_LSP_PATH=/path/to/kotlin-lsp
 ```
 
-### Manual Installation
-
-```bash
-# Download specific version for your architecture
-wget https://github.com/yamsergey/termux-filewatcher/releases/download/v1.0.0/libfilewatcher-aarch64-v1.0.0.tar.gz
-tar -xzf libfilewatcher-aarch64-v1.0.0.tar.gz
-
 # Backup original (optional)
 cp /path/to/kotlin-lsp/native/Linux-AArch64/libfilewatcher_jni.so{,.backup}
 
@@ -102,8 +90,6 @@ cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/
 Once installed, the Kotlin LSP will use the new native library automatically:
 
 ```bash
-# Test that LSP starts without errors
-./kotlin-lsp.sh.orig --help
 
 # Start LSP server  
 ./kotlin-lsp.sh.orig --stdio
