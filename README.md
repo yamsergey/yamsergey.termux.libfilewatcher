@@ -1,6 +1,6 @@
 # Termux FileWatcher JNI Library
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: LGPL v3](https://img.shields.io/badge/License-LGPL%20v3-blue.svg)](https://www.gnu.org/licenses/lgpl-3.0)
 [![Platform: Android/Termux](https://img.shields.io/badge/Platform-Android%2FTermux-green.svg)](https://termux.com/)
 [![Build Status](https://github.com/yamsergey/yamsergey.termux.libfilewatcher/workflows/CI/badge.svg)](https://github.com/yamsergey/yamsergey.termux.libfilewatcher/actions)
 [![Release](https://github.com/yamsergey/yamsergey.termux.libfilewatcher/workflows/Release/badge.svg)](https://github.com/yamsergey/yamsergey.termux.libfilewatcher/releases/latest)
@@ -59,7 +59,9 @@ uname -m
 wget https://github.com/yamsergey/termux-filewatcher/releases/download/v1.0.0/libfilewatcher-aarch64-v1.0.0.tar.gz
 tar -xzf libfilewatcher-aarch64-v1.0.0.tar.gz
 ```
-``
+
+cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/
+
 
 ### Build from Source
 
@@ -78,11 +80,6 @@ make stub
 make install KOTLIN_LSP_PATH=/path/to/kotlin-lsp
 ```
 
-# Backup original (optional)
-cp /path/to/kotlin-lsp/native/Linux-AArch64/libfilewatcher_jni.so{,.backup}
-
-# Copy new library
-cp libfilewatcher_jni.so /path/to/kotlin-lsp/native/Linux-AArch64/
 ```
 
 ## 📖 Usage
@@ -310,7 +307,7 @@ export FILEWATCHER_DEBUG=1
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Lesser General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
